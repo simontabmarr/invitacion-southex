@@ -121,6 +121,29 @@ body{-webkit-tap-highlight-color:transparent}
 #s4>*{flex:none}
 .stamp{white-space:nowrap}
 .badge .pass{gap:10px;font-size:18px;letter-spacing:.1em;white-space:nowrap}
+
+/* Formulario */
+.rsvp{width:min(80vw,330px);margin-top:22px;opacity:0}
+#s4.on .rsvp{animation:up .8s 2s forwards}
+.cta,.send{width:100%;font:400 22px/1 var(--display);letter-spacing:.14em;padding:14px;border:2px solid var(--brand);background:var(--brand);color:#fff;cursor:pointer;border-radius:4px}
+.cta{background:transparent;color:var(--paper);border-color:var(--paper)}
+.cta:hover,.cta[aria-expanded="true"]{border-color:var(--brand);color:var(--brand)}
+.cta:focus-visible,.send:focus-visible,.rsvp input:focus-visible{outline:2px solid var(--sky);outline-offset:2px}
+#rsvpForm{margin-top:16px;display:grid;gap:14px;text-align:left}
+#rsvpForm[hidden]{display:none}
+#rsvpForm label{display:block;font-size:12px;letter-spacing:.16em;color:var(--sky);text-transform:uppercase}
+#rsvpForm input:not([type=radio]){display:block;width:100%;margin-top:6px;padding:11px 12px;background:#000;border:1px solid #fff6;border-radius:4px;color:var(--paper);font:16px var(--type)}
+#rsvpForm input.bad{border-color:var(--brand)}
+fieldset{border:0;padding:0;display:grid;gap:8px}
+legend{font-size:12px;letter-spacing:.16em;color:var(--sky);text-transform:uppercase;margin-bottom:8px}
+.opt{cursor:pointer}
+.opt input{position:absolute;opacity:0}
+.opt span{display:block;text-align:center;padding:12px;border:1px solid #fff6;border-radius:4px;color:var(--paper);font:400 18px/1 var(--display);letter-spacing:.12em}
+.opt input:checked+span{background:var(--paper);color:#000;border-color:var(--paper)}
+.opt input:focus-visible+span{outline:2px solid var(--sky);outline-offset:2px}
+.send[disabled]{opacity:.6;cursor:wait}
+.msg{min-height:1.4em;font-size:13px;letter-spacing:.12em;text-align:center;line-height:1.6}
+.msg.ok{color:var(--sky)}.msg.err{color:var(--brand)}
 #skip{position:fixed;right:16px;bottom:max(16px,env(safe-area-inset-bottom));z-index:60;background:none;border:1px solid #fff5;color:#fff9;font:12px var(--type);padding:8px 12px;letter-spacing:.1em}
 #skip:focus-visible{outline:2px solid var(--brand)}
 @media (prefers-reduced-motion:reduce){.grain{animation:none}#scan{animation-duration:1s}}
@@ -183,6 +206,22 @@ body{-webkit-tap-highlight-color:transparent}
     <div class="barcode"></div>
   </div>
   <div class="prog b"><i></i></div>
+  <div class="rsvp" id="rsvp">
+    <button type="button" class="cta" id="ctaBtn" aria-expanded="false" aria-controls="rsvpForm">CONFIRMAR ASISTENCIA</button>
+    <form id="rsvpForm" hidden novalidate>
+      <label>Nombre y apellido<input name="nombre" autocomplete="name" required></label>
+      <label>Email<input name="email" type="email" autocomplete="email" required></label>
+      <label>Empresa<input name="empresa" autocomplete="organization"></label>
+      <fieldset>
+        <legend>¿Asistís?</legend>
+        <label class="opt"><input type="radio" name="asistencia" value="Sí" required><span>SÍ, CUENTEN CONMIGO</span></label>
+        <label class="opt"><input type="radio" name="asistencia" value="No"><span>NO PUEDO</span></label>
+      </fieldset>
+      <input type="text" name="_honey" tabindex="-1" autocomplete="off" style="display:none">
+      <button type="submit" class="send" id="sendBtn">ENVIAR</button>
+      <p class="msg" id="rsvpMsg" role="status" aria-live="polite"></p>
+    </form>
+  </div>
   <p class="nextlbl" id="nextlbl">Próxima actualización en</p>
   <div class="clock" id="clock2" role="timer" aria-live="off"></div>
 </section>
@@ -287,6 +326,36 @@ function intro(){
 }
 function skip(){ timers.forEach(t=>{clearTimeout(t);clearInterval(t)}); if(Date.now()>=T1) reveal(); else show('s3'); $('#skip').style.display='none'; }
 $('#skip').addEventListener('click',skip);
+
+
+/* ====== FORMULARIO ======
+   Las confirmaciones llegan a este mail (vía FormSubmit). */
+const FORM_EMAIL = 'Nahuel.palermo@southex.com.ar';
+const cta=$('#ctaBtn'), form=$('#rsvpForm'), msg=$('#rsvpMsg'), sendBtn=$('#sendBtn');
+cta.addEventListener('click',()=>{
+  const open = form.hidden; form.hidden = !open; cta.setAttribute('aria-expanded',open);
+  if(open) setTimeout(()=>form.scrollIntoView({behavior:'smooth',block:'center'}),50);
+});
+form.addEventListener('input',e=>{ e.target.classList.remove('bad'); if(msg.classList.contains('err')){ msg.className='msg'; msg.textContent=''; } });
+form.addEventListener('submit',async e=>{
+  e.preventDefault(); msg.className='msg'; msg.textContent='';
+  const d = Object.fromEntries(new FormData(form));
+  form.querySelectorAll('input').forEach(i=>i.classList.remove('bad'));
+  const bad=[]; if(!d.nombre?.trim()) bad.push('nombre'); if(!/^\S+@\S+\.\S+$/.test(d.email||'')) bad.push('email');
+  if(bad.length){ bad.forEach(n=>form.elements[n].classList.add('bad')); form.elements[bad[0]].focus(); msg.className='msg err'; msg.textContent='> REVISÁ LOS CAMPOS MARCADOS'; return; }
+  if(!d.asistencia){ msg.className='msg err'; msg.textContent='> ELEGÍ SI ASISTÍS'; return; }
+  sendBtn.disabled=true; sendBtn.textContent='ENVIANDO…'; msg.textContent='> TRANSMITIENDO…';
+  try{
+    const r = await fetch('https://formsubmit.co/ajax/'+FORM_EMAIL,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},
+      body:JSON.stringify({nombre:d.nombre,email:d.email,empresa:d.empresa||'-',asistencia:d.asistencia,_subject:'Confirmación - Invitación Southex 03/12',_template:'table',_honey:d._honey||''})});
+    const j = await r.json();
+    if(!r.ok || j.success==='false') throw new Error('x');
+    form.querySelectorAll('label,fieldset').forEach(el=>el.style.display='none'); sendBtn.style.display='none';
+    msg.className='msg ok'; msg.textContent='> CONFIRMACIÓN RECIBIDA. ACCESO REGISTRADO.';
+  }catch(err){
+    sendBtn.disabled=false; sendBtn.textContent='ENVIAR'; msg.className='msg err'; msg.textContent='> NO SE PUDO ENVIAR. PROBÁ DE NUEVO.';
+  }
+});
 
 if(params.has('reveal')){ reveal(); } else { intro(); }
 </script>
